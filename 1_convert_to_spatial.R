@@ -19,10 +19,10 @@ saveSummarystat <- function(f, ref, gg){
   
   if(ncol(v) > 2 && check==2){
     # create raster
-    if(sum(names(v) %in% "year")>0){
-      rs <- createRasterMultiyear(v, ref)
+    if(sum(names(v) %in% "Year")>0){
+      rs <- createRasterMultiyear(v, ref, cc)
     } else {
-      rs <- createRaster(v, ref)
+      rs <- createRaster(v, cc, ref)
     }
     # summary values
     dv <- extract(rs, gg, weights = TRUE, 
@@ -35,16 +35,16 @@ saveSummarystat <- function(f, ref, gg){
   flush.console()
 }
 
-createRaster <- function(v, ref){
+createRaster <- function(v, cc, ref){
   rs <- rasterize(v[,cc, with=FALSE], ref, 
                   v[,!(colnames(v) %in% c(cc, "Year")), with=FALSE], fun=mean)
   return(rs)
 }
 
-createRasterMultiyear <- function(v, ref){
+createRasterMultiyear <- function(v, ref, cc){
   rsl <- lapply(unique(v$Year), function(year, v, ref){
     vs <-  v[v$Year==year, ]
-    rs <- createRaster(vs, ref)
+    rs <- createRaster(vs, cc, ref)
     names(rs) <- paste0(names(rs), "_", year)
     return(rs)
   }, v, ref)
