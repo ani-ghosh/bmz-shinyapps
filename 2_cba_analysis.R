@@ -29,7 +29,8 @@ getCropRaster <- function(f, crop){
 } 
 
 # estimate last 10 year average
-getMeanRaster <- function(rr, years){
+getMeanRaster <- function(f, years){
+  rr <- readRaster(f)
   rr <- subset(rr, grep(paste(years,collapse="|"), names(rr)))
   rr <- calc(rr, fun = mean)
   return(rr)
@@ -38,10 +39,12 @@ getMeanRaster <- function(rr, years){
 # crop-specific
 getMeanRasterCrop <- function(f, crop, years){
   rr <- getCropRaster(f, crop)
-  rr <- getMeanRaster(rr, years)
+  rr <- subset(rr, grep(paste(years,collapse="|"), names(rr)))
+  rr <- calc(rr, fun = mean)
   return(rr)
 } 
 
+#########################################################################################
 dir <- "C:\\Users\\anibi\\Documents\\work\\bmz_shiny"
 g1 <- getData("GADM", country="KEN", level=1, path=file.path(dir, "vector"))
 g2 <- getData("GADM", country="ETH", level=1, path=file.path(dir, "vector"))
@@ -57,30 +60,88 @@ f1 <- grep("10min", ff, value=TRUE)
 # input
 # manure 
 r1 <- grep("Manurefrac_2014_EA", f1, value=TRUE)
-man <- getCropRaster(r1, "TeCo")
+r1 <- getCropRaster(r1, "TeCo_2014")
+names(r1) <- "manurefrac" 
 
 # total fertilization (unit kg-N/m^2)
 r2 <- grep("Nfert_total_2014_EA", f1, value=TRUE)
-fert <- getCropRaster(r2, "TeCo")
+r2 <- getCropRaster(r2, "TeCo_2014")
+names(r2) <- "nfert"
 
 # convert fert from kg-n/m^2 to kg-N/ha
-fert <- fert/0.0001
+r2 <- r2/0.0001
 
 # total manure applied
-tman <- man*fert
+r12 <- r1*r2
+names(r12) <- "tman"
+
+# total fertlizer
+r21 <- (1-r1)*r2
+names(r21) <- "tfert"
 
 # irrigation
 r3 <- grep("CRUJRA_PURE_MAIZE_10min/A1-irri/irrigation.tif", f1, value=TRUE)
-irr <- getMeanRaster(r3, 2091:2100)
+r3 <- getMeanRaster(r3, 2091:2100)
+names(r3) <- "wat_demand"
 
 # crop fractions
-r4 <- grep("cropfracs_for_EA_run_100maize_EA", f1, value=TRUE)
-getCropRaster(r1, "TeCo")
+# r4 <- grep("cropfracs_for_EA_run_100maize_EA", f1, value=TRUE)
+# fracs <- getCropRaster(r4, "TeCo")
+
+# maize fractions
+# r5 <- grep("cropfracs_for_EA_run_allcrops_EA_10min", f1, value=TRUE)
+# mfracs <- getCropRaster(r5, "TeCo")
+# plot(mfracs)
 
 ##############################################################################
 # output
 f2 <- grep("CRUJRA_PURE_MAIZE_10min", f1, value=TRUE)
 
-# yield and soc
+# yield
 r4 <- grep("yield", f2, value=TRUE)
-yld <- getMeanRasterCrop(r4[1], 2091:2100, "TeCo")
+r4 <- getMeanRasterCrop(r4[9], "TeCo", 2091:2100)
+r4 <- r4*10 # convert to ton/ha
+names(r4) <- "yield"
+
+# soc
+r5 <- grep("cpool_cropland", f2, value=TRUE)
+# yld <- getCropRaster(r6[1], "TeCo")
+r5 <- getMeanRasterCrop(r5[9], "SoilC", 2091:2100)
+names(r5) <- "soc"
+
+# nflux
+# "leach_2100",  "flux_2100"
+r6 <- grep("nflux_cropland", f2, value=TRUE)
+r61 <- getMeanRasterCrop(r6[9], "leach", 2091:2100)
+r62 <- getMeanRasterCrop(r6[9], "flux", 2091:2100)
+names(r61) <- "leach"
+names(r62) <- "flux"
+
+# final stack
+rs <- stack(r1,r2,r12,r21,r3,r4,r5,r61,r62)
+names(rs)
+
+dv <- extract(rs, g1, weights = TRUE, 
+              normalizeWeights = FALSE, fun=mean, na.rm=TRUE, sp = TRUE)
+
+out <- dv[, names(dv) %in% c("NAME_0","NAME_1", names(rs))]
+data.table::fwrite(out@data, file.path(dir, "a2_county_ken.csv"))
+
+
+g11 <- g1[g1$NAME_1 %in% c("Vihiga", "Kakamega", "Siaya"),]
+cc <- extract(rs, g11, cellnumbers=TRUE)
+cc <- do.call(rbind, cc)
+cc <- cbind(xyFromCell(rs, cc[,1]), cc)
+cc <- data.frame(county=c(rep("Kakamega", 5), rep("Siaya", 11), rep("Vihiga",1)),cc,
+                 stringsAsFactors = FALSE)
+
+data.table::fwrite(cc, file.path(dir, "a2_grid_3county_ken.csv"))
+
+
+
+out <- dv[, names(dv) %in% c("NAME_0","NAME_1", names(rs))]
+data.table::fwrite(out@data, file.path(dir, "a2_county_ken.csv"))
+
+
+# r7 <- grep("lu_2014_luh2_EA_10min", f1, value=TRUE)
+# luc <- getCropRaster(f1, "lu_2014_luh2_EA_10min")
