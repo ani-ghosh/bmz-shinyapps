@@ -15,7 +15,7 @@ saveSummarystat <- function(f, ref, gg){
   v <- fread(f)
   # check if Lan/Lat and data exists
   cc <- c("Lon", "Lat")
-  check <- sum(names(v) %in% cc)
+  check <- length(grep(paste(cc, collapse = "|"), names(v)))
   
   if(ncol(v) > 2 && check==2){
     # create raster
