@@ -15,9 +15,11 @@ saveSummarystat <- function(f, ref, gg){
   v <- fread(f)
   # check if Lan/Lat and data exists
   cc <- c("Lon", "Lat")
-  check <- length(grep(paste(cc, collapse = "|"), names(v)))
+  ccid <- pmatch(cc, names(v))
+  check <- length(ccid)
   
   if(ncol(v) > 2 && check==2){
+    names(v)[ccid] <- cc
     # create raster
     if(sum(names(v) %in% "Year")>0){
       rs <- createRasterMultiyear(v, ref, cc)
@@ -70,7 +72,6 @@ gg <- bind(g1,g2)
 
 # create a folder for saving raster, shapefile, and csv output, keep the same folder structure as the input
 ff <- list.files(datadir, pattern = ".out$|.txt$",full.names = TRUE, recursive = TRUE)
-# only 
 
 # create reference raster at two resolution
 fr10 <- grep("gridlist_in_EA_10min", ff, value=TRUE)
@@ -79,11 +80,15 @@ ref10 <- createRefraster(fr10, resfrac=5.85)
 fr05 <- grep("gridlist_in_EA_0p5", ff, value=TRUE)
 ref05 <- createRefraster(fr05, resfrac=2)
 
+# now move ahead with the files
 # get summary two set of resolution
 ff1 <- grep("10min", ff, value=TRUE)
 
+# land use fractions didnot complete
+# ff2 <- grep("lu_", ff1, value = TRUE)
+
 # single run
-# saveSummarystat(ff1[4], ref10, gg)
+# lapply(ff2, saveSummarystat,  ref10, gg)
 # 10 min
 plan(multisession, workers = 6)
 future_lapply(ff1, saveSummarystat, ref10, gg)
