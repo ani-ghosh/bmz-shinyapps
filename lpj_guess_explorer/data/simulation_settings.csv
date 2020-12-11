@@ -1,0 +1,7 @@
+Simulation ,FCC,FNT ,FRR ,Fnman,FMineral-N ,FConserv ,FIrri ,FReal
+Cover crops ,YES ,NO ,NO ,NO ,NO ,YES ,NO ,NO
+Tillage ,YES ,NO ,YES ,YES ,YES ,NO ,YES ,YES
+Residual removal ,90%,90%,0%,90%,90%,0%,90%,90%
+Manure N ,YES ,YES ,YES ,NO ,NO ,YES ,YES ,YES
+Mineral N ,YES ,YES ,YES ,YES ,YES,YES ,YES ,YES
+Irrigation ,NO ,NO ,NO ,NO ,NO ,NO ,YES ,NO

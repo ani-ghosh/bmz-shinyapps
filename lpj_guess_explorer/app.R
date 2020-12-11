@@ -10,9 +10,13 @@ library(reshape2)
 library(shiny)
 library(shinydashboard)
 library(leaflet)
+library(sf)
 
 # input data
 # v <- getData("GADM", country="KEN", level=1, path="data")
+
+# simulation table
+sv <- read.csv("data/simulation_settings.csv", stringsAsFactors = FALSE)
 
 # input data
 ff <- list.files(path = "data", pattern = "summary_stat_vector", full.names = TRUE)
@@ -30,6 +34,7 @@ dd <- grep("model",ls(), value = TRUE)
 rdf <- data.frame(outvarsid = c("soc_2020_2049_TeCo_2014","flux_2020_2049_TeCo_2014",
                                 "leach_2020_2049_TeCo_2014","yield_2020_2049_TeCo_2014"),
                   outvarsname = c("Soil organic carbon", "N flux", "N leach", "Yield"),
+                  units = c("kg C/m^2","kg N/ha","kg N/ha","ton/ha"),
                   outvarspalette = c("YlOrBr", "PuBuGn", "PuBuGn", "YlGn"),
                   stringsAsFactors = FALSE)
 
@@ -41,7 +46,7 @@ ui <- dashboardPage(dashboardHeader(title = "LPJ GUESS explorer", titleWidth = 3
     
     ## Sidebar content
     dashboardSidebar(
-        width = 300,
+        width = 200,
         sidebarMenu(
             menuItem("Information",tabName = "intro", icon = icon("info")),
             menuItem("Map",tabName = "map",icon = icon("map")),
@@ -51,13 +56,17 @@ ui <- dashboardPage(dashboardHeader(title = "LPJ GUESS explorer", titleWidth = 3
     
     ## Body content
     dashboardBody(
-        
+        tags$head(
+            tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
+        ),
         tabItems(
             # First tab content
             tabItem(tabName = "intro",
                 fluidRow(
-                    h2(HTML("<strong>Enhancing soil carbon</strong>")),
-                    h3(tags$p("1st paragraph"))
+                    h2(HTML("<strong>Background</strong>"), style = "font-size:20px;"),
+                    h3(tags$p("The LPJ-GUESS global vegetation model has been applied to assess the impacts of large scale adoption of improved crop management practices, e.g. residue retention, manure application and reduced tillage, on SOC, yield and nitrogen leaching in cropland areas in Kenya and Ethiopia. As part of this work, the model has been developed to include biological nitrogen fixation and applied at 10 minute resolution using downscaled CRU JRA climate data. Here we show the results for pure or monoculture maize) simulation."), style = "font-size:15px;"),
+                    h3(HTML("<strong>Simulation settings used for comparison of soil fertility and yields with different managements</strong>"), style = "font-size:18px;"),
+                    DT::dataTableOutput("simtable", width = "auto", height = "auto")
                 )
             ), 
             # Second tab content
@@ -92,14 +101,36 @@ ui <- dashboardPage(dashboardHeader(title = "LPJ GUESS explorer", titleWidth = 3
                     )
                 ),
                 leafletOutput("map")
+                # column(4, downloadButton("downloadMap", "Download Map")),
+                # column(4, downloadButton("downloadTable", "Download Table"))
             ),
             # third tab content
             tabItem(tabName = "cba",
                     fluidRow(
+                        h2(HTML("<strong>Required Input</strong>"), style = "font-size:15px;"),
+                        column(4, numericInput("discountrate", "Discount Rate", 0.1, min = 0, max = 1, width=100)),
+                        column(4, numericInput("exchangerate", "Exchange Rate", 100, min = 1, max = 1000, width=100)),
+                        column(4, numericInput("timehorizon", "Time Horizon", 45, min = 1, max = 1000, width=100)),
+                        # column(4, numericInput("popfarmers", "% Farmers", 45, min = 1, max = 1000, width=100)),
+                        
+                        # h2(HTML("<strong>Option 1</strong>"), style = "font-size:15px;"),
                         box(
-                            title = "Cost of CA parctices",
+                            title = "Option 1: Cost of CA parctices",
                             sliderInput("slider", "% increase in cost", 1, 100, 1)
-                        )
+                        ),
+                        
+                        # h2(HTML("<strong>Option 2</strong>"), style = "font-size:15px;"),
+                        #Selector for file upload
+                        fileInput('datafile', 'Option 2: Cost of practicess (choose CSV file)',
+                                  accept=c('text/csv', 'text/comma-separated-values,text/plain')),
+                        
+                        # numericInput("farmcost", "Cost of Conventional Practice", 1000, min = 0, max = 10000),
+                        # numericInput("csacost", "Cost of CSA Practice", 100, min = 1, max = 1000)
+                        
+                        #submitButton("Run CBA analysis"),
+                        
+                        column(4, downloadButton("downloadCBAresults", "Download CBA report"))
+
                     )
             )
         )
@@ -109,6 +140,9 @@ ui <- dashboardPage(dashboardHeader(title = "LPJ GUESS explorer", titleWidth = 3
 
 # Define server logic
 server <- function(input, output) {
+    output$simtable = DT::renderDataTable({
+        datatable(sv %>% as.data.frame(), options = list(pageLength = 10, autoWidth = TRUE), rownames= FALSE)
+    })
     # summary table
     observeEvent(input$simulation, {
         mod <- grep(input$simulation, dd, value = TRUE)
@@ -116,18 +150,15 @@ server <- function(input, output) {
     })
     
     observeEvent(input$outvar, {
-        # output$my_tmap = renderTmap({
-        #     tm_shape(data) + tm_polygons(input$outvar, legend.title = "Did it work")
-        # })
-        sdf <- rdf[rdf$outvarsid==input$outvar,]
+        sdf <- rdf[grep(input$outvar, rdf$outvarsid, ignore.case = TRUE),]
         val <- as.numeric(data@data[, sdf$outvarsid])
         pal <- colorBin(sdf$outvarspalette, domain = val)
         
         bins <- round(seq(from = min(val), to = max(val), length.out = 10),2)
         pal <- colorBin(sdf$outvarspalette, bins = bins)
         
-        yld <- paste0(round(data$yield_2020_2049_TeCo_2014, 2), " kg/ha")
-        soc <- paste0(round(data$soc_2020_2049_TeCo_2014, 2), " kg/C-m^2")
+        yld <- paste0(round(data$yield_2020_2049_TeCo_2014, 2), " ton/ha")
+        soc <- paste0(round(data$soc_2020_2049_TeCo_2014, 2), " kg C/m^2")
         
         sdata <- st_as_sf(data)
         
@@ -139,7 +170,11 @@ server <- function(input, output) {
                            map(htmltools::HTML)) %>%
                 leaflet() %>%
                 setView(lng = 39, lat = 6, zoom = 5) %>%
-                addTiles("CartoDB.Positron", options = providerTileOptions(noWrap = TRUE)) %>%
+                addTiles() %>%
+                addLayersControl(
+                    position = "bottomright",
+                    options = layersControlOptions(collapsed = FALSE)) %>%
+                addProviderTiles(providers$CartoDB.Positron) %>%
                 addPolygons(label = ~popup,
                             fillColor = ~pal(val),
                             color = "#444444",
@@ -167,36 +202,9 @@ server <- function(input, output) {
 shinyApp(ui = ui, server = server)
 
 
-
-##########################################################################################
-# summary input
-# fluidRow(
-#     # Dynamic infoBoxes
-#     infoBoxOutput("yield"),
-#     infoBoxOutput("soc"),
-#     infoBoxOutput("leach"),
-#     infoBoxOutput("flux"),
-#     infoBoxOutput("fertilizer")
-# )
-# not used
-# output$yield <- renderInfoBox({
-#     infoBox(
-#         "yield", paste("80", "kg/ha"), icon = icon("wheat"), color = "black")
-# })
-# output$soc <- renderInfoBox({
-#     infoBox(
-#         "soc", paste("80", "kg/ha"), icon = icon("seedling"))
-# })
-# output$flux <- renderInfoBox({
-#     infoBox(
-#         "flux", paste("80", "bags"), icon = icon("leaf"))
-# })
-# output$leach <- renderInfoBox({
-#     infoBox(
-#         "leach", paste("80", "bags"), icon = icon("humidity"))
-# })
-# output$fertilizer <- renderInfoBox({
-#     infoBox(
-#         "fertilizer", paste("80", "bags"), icon = icon("sack"))
-# })
-
+# better
+# https://github.com/eparker12/nCoV_tracker
+# how to add summary values https://github.com/rstudio/shiny-gallery/tree/master/nz-trade-dash
+# also streaming CRAN data https://rstudio.github.io/shinydashboard/examples.html
+# more customization appsilon blog with two new packages
+# https://www.paulamoraga.com/book-geospatial/sec-dashboardswithshiny.html
