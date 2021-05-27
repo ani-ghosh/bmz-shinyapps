@@ -11,6 +11,7 @@ library(shiny)
 library(shinydashboard)
 library(leaflet)
 library(sf)
+library(rgeos)
 
 # input data
 # v <- getData("GADM", country="KEN", level=1, path="data")
@@ -156,62 +157,69 @@ server <- function(input, output) {
     #     input$simulation
     # })
     
-    # summary table
-    observeEvent(input$simulation, {
+    spdata <- eventReactive(input$simulation, {
+        req(input$simulation)
         mod <- grep(input$simulation, dd, value = TRUE)
         # spdata <- get(mod)
-        spdata <- dds[grepl(mod, names(dds))][[1]]
-    }, ignoreInit = TRUE)
+        out <- dds[grepl(mod, names(dds))][[1]]
+        out
+    })
     
-    observeEvent(input$outvar, {
-        sdf <- rdf[grep(input$outvar, rdf$outvarsid, ignore.case = TRUE),]
+    sdf <- eventReactive(input$outvar, {
+        req(input$outvar)
+        out <- rdf[grep(input$outvar, rdf$outvarsid, ignore.case = TRUE),]
         # sdf <- rdf[grep(outvar, rdf$outvarsid, ignore.case = TRUE),]
-        spdataframe <- as.data.frame(spdata)
-        val <- as.numeric(spdataframe[,sdf$outvarsid])
-        pal <- colorBin(sdf$outvarspalette, domain = val)
+        out
+    })
+    
+    output$map <- renderLeaflet({
+        req(spdata(), sdf())
+        
+        spdataframe <- as.data.frame(spdata())
+        
+        val <- as.numeric(spdataframe[,sdf()$outvarsid])
+        pal <- colorBin(sdf()$outvarspalette, domain = val)
         
         bins <- round(seq(from = min(val), to = max(val), length.out = 10),2)
-        pal <- colorBin(sdf$outvarspalette, bins = bins)
+        pal <- colorBin(sdf()$outvarspalette, bins = bins)
         
-        yld <- paste0(round(spdata$yield_2020_2049_TeCo_2014, 2), " ton/ha")
-        soc <- paste0(round(spdata$soc_2020_2049_TeCo_2014, 2), " kg C/m^2")
+        yld <- paste0(round(spdata()$yield_2020_2049_TeCo_2014, 2), " ton/ha")
+        soc <- paste0(round(spdata()$soc_2020_2049_TeCo_2014, 2), " kg C/m^2")
         
-        sdata <- st_as_sf(spdata)
+        sdata <- st_as_sf(spdata())
         
-        output$map <- renderLeaflet({
-            sdata %>%
-                mutate(popup = paste("<strong>", NAME_1, "</strong>","<br/>",
-                                     "Yield ", yld,"<br/>",
-                                     "SOC ", soc) %>%
-                           map(htmltools::HTML)) %>%
-                leaflet() %>%
-                setView(lng = 39, lat = 6, zoom = 5) %>%
-                addTiles() %>%
-                addLayersControl(
-                    position = "bottomright",
-                    options = layersControlOptions(collapsed = FALSE)) %>%
-                addProviderTiles(providers$CartoDB.Positron) %>%
-                addPolygons(label = ~popup,
-                            fillColor = ~pal(val),
-                            color = "#444444",
-                            weight = 1,
-                            smoothFactor = 0.5,
-                            opacity = 0.2,
-                            fillOpacity = 1,
-                            highlightOptions = highlightOptions(color = "red",
-                                                                weight = 1,
-                                                                bringToFront = TRUE),
-                            labelOptions = labelOptions(
-                                style = list("font-weight" = "normal", padding = "3px 8px"),
-                                textsize = "15px",
-                                direction = "auto")) %>%
-                addLegend(pal = pal,
-                          values = ~val,
-                          opacity = 1,
-                          position = "bottomleft",
-                          title = sdf$outvarsname)
-        })
-    } , ignoreInit = TRUE)
+        sdata %>%
+            mutate(popup = paste("<strong>", NAME_1, "</strong>","<br/>",
+                                 "Yield ", yld,"<br/>",
+                                 "SOC ", soc) %>%
+                       map(htmltools::HTML)) %>%
+            leaflet() %>%
+            setView(lng = 39, lat = 6, zoom = 5) %>%
+            addTiles() %>%
+            addLayersControl(
+                position = "bottomright",
+                options = layersControlOptions(collapsed = FALSE)) %>%
+            addProviderTiles(providers$CartoDB.Positron) %>%
+            addPolygons(label = ~popup,
+                        fillColor = ~pal(val),
+                        color = "#444444",
+                        weight = 1,
+                        smoothFactor = 0.5,
+                        opacity = 0.2,
+                        fillOpacity = 1,
+                        highlightOptions = highlightOptions(color = "red",
+                                                            weight = 1,
+                                                            bringToFront = TRUE),
+                        labelOptions = labelOptions(
+                            style = list("font-weight" = "normal", padding = "3px 8px"),
+                            textsize = "15px",
+                            direction = "auto")) %>%
+            addLegend(pal = pal,
+                      values = ~val,
+                      opacity = 1,
+                      position = "bottomleft",
+                      title = sdf()$outvarsname)
+    })
 }
 
 # Run the application 

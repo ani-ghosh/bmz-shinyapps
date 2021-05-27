@@ -1,0 +1,13 @@
+name: crop_manage_lpjguess
+title:
+username:
+account: agbiogeo
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4193233
+bundleId: 4646115
+url: https://agbiogeo.shinyapps.io/crop_manage_lpjguess/
+when: 1622111645.5257
+lastSyncTime: 1622111645.5257
+asMultiple: FALSE
+asStatic: FALSE
